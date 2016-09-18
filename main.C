@@ -1,4 +1,4 @@
-// Felipe de Albuquerque Mello Pereira
+// Author: Felipe de Albuquerque Mello Pereira
 // Project 1 of 'Concurrent and Parallel Programming' course
 
 
