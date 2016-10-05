@@ -23,7 +23,7 @@
 // 'producer' and 'consumer' functions to have a 'while(true) {...}' instead.
 // If you choose a different number, the writer threads will eventually exit, joining the main
 // thread, while the reader threads will be left waiting forever.
-static int const NUMBER_TOTAL_MESSAGES_PER_THREAD = INFINITY;//100;
+static int const NUMBER_TOTAL_MESSAGES_PER_THREAD = INFINITY; //100;
 static int buffer[BUFFER_SIZE];
 static int next_free = 0;
 static int oldest_unread = 0;
@@ -45,6 +45,15 @@ static int active_writers = 0;
 static pthread_t producer_threads[NUM_WRITERS];
 static pthread_t consumer_threads[NUM_READERS];
 
+// Define colors for printf use
+#define RED     "\x1b[31m"
+#define GREEN   "\x1b[32m"
+#define YELLOW  "\x1b[33m"
+#define BLUE    "\x1b[34m"
+#define MAGENTA "\x1b[35m"
+#define CYAN    "\x1b[36m"
+#define RESET   "\x1b[0m"
+
 
 int inc(int curr_value) {
     // Increments curr_value and wraps around the buffer if needed.
@@ -64,18 +73,17 @@ void wait_for(unsigned int secs) {
 
 void read_msg(int buffer_index, int cid) {
     // Prints message number, reader's thread number, buffer index and semaphores' values.
-
-    printf("Reader Thread #%d read int %d from index %d\n",
+    printf(CYAN "Reader Thread #%d read int %d from index %d\n" RESET,
            cid,
            buffer[buffer_index],
            buffer_index);
     int sem_value;
     sem_getvalue(&em, &sem_value);
-    printf("em = %d\n", sem_value);
+    printf(CYAN "em = %d\n" RESET, sem_value);
     sem_getvalue(&sem_reader, &sem_value);
-    printf("sem_reader = %d\n", sem_value);
+    printf(CYAN "sem_reader = %d\n" RESET, sem_value);
     sem_getvalue(&sem_writer, &sem_value);
-    printf("sem_writer = %d\n", sem_value);
+    printf(CYAN "sem_writer = %d\n" RESET, sem_value);
     wait_for(1);
 
     return;
@@ -86,17 +94,17 @@ void write_msg(int buffer_index, int message_number, int pid) {
     // and semaphores' values.
 
     buffer[buffer_index] = message_number;
-    printf("Writer Thread #%d wrote int %d at index %d\n",
+    printf(MAGENTA "Writer Thread #%d wrote int %d at index %d\n" RESET,
            pid,
            message_number,
            buffer_index);
     int sem_value;
     sem_getvalue(&em, &sem_value);
-    printf("em = %d\n", sem_value);
+    printf(MAGENTA "em = %d\n" RESET, sem_value);
     sem_getvalue(&sem_reader, &sem_value);
-    printf("sem_reader = %d\n", sem_value);
+    printf(MAGENTA "sem_reader = %d\n" RESET, sem_value);
     sem_getvalue(&sem_writer, &sem_value);
-    printf("sem_writer = %d\n", sem_value);
+    printf(MAGENTA "sem_writer = %d\n" RESET, sem_value);
     wait_for(1);
 
     return;
@@ -105,21 +113,20 @@ void write_msg(int buffer_index, int message_number, int pid) {
 void signal() {
     // Baton passing
     // Also prints which kind of thread got the baton.
-
     if ((next_free != oldest_unread || is_empty) && writers_waiting > 0) {
         // Note that next_free == oldest_unread only when the buffer is full and when the buffer is
         // empty. next_free != oldest_unread when the buffer is only half-full.
-        printf("PASSED THE BATON TO A WRITER\n\n");
+        printf(YELLOW "PASSED THE BATON TO A WRITER\n" RESET);
         wait_for(1);
         writers_waiting--;
         sem_post(&sem_writer);
     } else if (!is_empty && readers_waiting > 0) {
-        printf("PASSED THE BATON TO A READER\n\n");
+        printf(YELLOW "PASSED THE BATON TO A READER\n" RESET);
         wait_for(1);
         readers_waiting--;
         sem_post(&sem_reader);
     } else {
-        printf("RELEASED EM\n\n");
+        printf(YELLOW "RELEASED EM\n" RESET);
         wait_for(1);
         sem_post(&em);
     }
@@ -147,24 +154,24 @@ void deposit(int* buffer, int number_to_write, int pid) {
         */
 
         sem_wait(&em);
-        printf("Writer Thread #%d got EM.\n", pid);
+        printf(RED "Writer Thread #%d got EM.\n" RESET, pid);
         wait_for(1);
         if (next_free == oldest_unread && !is_empty) {
             // Note that next_free == oldest_unread only when the buffer is full and when the buffer
             // is empty.
-            printf("Writer Thread #%d got into the writer's waitlist\n\n", pid);
+            printf(RED "Writer Thread #%d got into the writer's waitlist\n" RESET, pid);
             wait_for(1);
             writers_waiting++;
             sem_post(&em);
             wait_for(1);
             sem_wait(&sem_writer);
         }
-        printf("Writer Thread #%d is now active.\n", pid);
+        printf(RED "Writer Thread #%d is now active.\n" RESET, pid);
         write_msg(next_free, number_to_write, pid);
         number_read[next_free] = 0; // no reader thread has read this new message
         if (is_empty) {
             is_empty = false;
-            printf("is_empty = %d\n", is_empty);
+            printf(RED "is_empty = %d\n" RESET, is_empty);
         }
         next_free = inc(next_free);
         for (int cid = 0; cid < NUM_READERS; cid++) {
@@ -172,7 +179,7 @@ void deposit(int* buffer, int number_to_write, int pid) {
             is_up_to_date[cid] = false;
         }
         if (next_free == oldest_unread && !is_empty) {
-            printf("Buffer is now FULL!\n");
+            printf(RED "Buffer is now FULL!\n" RESET);
         }
         signal();
 
@@ -205,7 +212,7 @@ void consume(int* buffer, int cid) {
         */
 
         sem_wait(&em);
-        printf("Reader Thread #%d got the EM.\n", cid);
+        printf(BLUE "Reader Thread #%d got the EM.\n" RESET, cid);
         wait_for(1);
         if (is_empty || is_up_to_date[cid]) {
             // 'is_up_to_date[cid]' is actually not necessary here, but it helps garantee liveness.
@@ -215,14 +222,15 @@ void consume(int* buffer, int cid) {
             // using '|| is_up_to_date[cid]' above, we are garanteed this does not happen, since
             // this thread would be left in the reader's waitlist and the other thread would finally
             // pick the semaphore.
-            printf("Reader Thread #%d got into the reader's waitlist.\n\n", cid);
+            printf(BLUE "Reader Thread #%d got into the reader's waitlist.\n" RESET, cid);
             wait_for(1);
             readers_waiting++;
             sem_post(&em);
             wait_for(1);
             sem_wait(&sem_reader);
         }
-        printf("Reader Thread #%d is now active.\n", cid);
+
+        printf(BLUE "Reader Thread #%d is now active.\n" RESET, cid);
         wait_for(1);
         if (!is_up_to_date[cid]) {
             // This thread still has at least one message to read.
@@ -236,7 +244,7 @@ void consume(int* buffer, int cid) {
                     if (inc(next_read[cid]) == next_free) {
                         // This was the last message available
                         is_empty = true;
-                        printf("is_empty = %d\n", is_empty);
+                        printf(BLUE "is_empty = %d\n" RESET, is_empty);
                     }
                 }
                 next_read[cid] = inc(next_read[cid]);
@@ -255,7 +263,8 @@ void* producer(void* args) {
         deposit(buffer, message_number, thread_number);
         message_number++;
     }
-    printf("Writer thread #%d FINISHED!\n\n", thread_number);
+    printf(GREEN "-----------------------------------------------------------"
+           " Writer thread #%d FINISHED!\n" RESET, thread_number);
     return NULL;
 }
 
